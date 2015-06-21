@@ -4,8 +4,11 @@ extern crate clock_ticks;
 extern crate obj;
 extern crate cgmath;
 extern crate genmesh;
+extern crate std;
 
 use std::thread;
+use std::fs::File;
+use std::io::Read;
 use self::genmesh::EmitTriangles;
 use glium::{self, Display};
 use glium::vertex::VertexBufferAny;
@@ -76,4 +79,23 @@ pub fn load_wavefront(display: &Display, data: &[u8]) -> VertexBufferAny {
     }
 
     glium::vertex::VertexBuffer::new(display, vertex_data).into_vertex_buffer_any()
+}
+
+pub fn read_from_obj<'a>(display: &glium::Display, path: &'a str)
+    -> std::io::Result<(glium::vertex::VertexBufferAny, glium::index::NoIndices)> {
+    let mut buf = Vec::new();
+    match File::open(path) {
+        Ok(mut f) => f.read_to_end(&mut buf).and_then(
+            |_| Ok((load_wavefront(display, &buf), glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList)))
+        ),
+        Err(e) => { println!("cannot open file: {}", e); Err(e) }
+    }
+}
+
+pub fn read_file_content<'a>(path: &'a str) -> std::io::Result<String> {
+    let mut content = String::new();
+    match File::open(path) {
+        Ok(mut f) => f.read_to_string(&mut content).and_then(|_| Ok(content)),
+        Err(e) => { println!("cannot open file: {}", e); Err(e) }
+    }
 }
