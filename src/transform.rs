@@ -4,12 +4,34 @@ extern crate std;
 use self::nalgebra::{Vec3, Vec4, Rot3, Mat3, Mat4, Eye, Diag, Col};
 use self::nalgebra::Rotation as RotationTrait;
 
+#[allow(dead_code)]
+fn extend_mat3_to_4<N: nalgebra::BaseNum>(m: Mat3<N>) -> Mat4<N> {
+    Mat4 {
+        m11: m.m11,     m12: m.m12,     m13: m.m13,     m14: N::zero(),
+        m21: m.m21,     m22: m.m22,     m23: m.m23,     m24: N::zero(),
+        m31: m.m31,     m32: m.m32,     m33: m.m33,     m34: N::zero(),
+        m41: N::zero(), m42: N::zero(), m43: N::zero(), m44: N::one(),
+    }
+}
+
+#[allow(dead_code)]
+fn extend_vec3_to_4<N: nalgebra::BaseNum>(v: Vec3<N>, aditional: N) -> Vec4<N> {
+    Vec4::new(v.x, v.y, v.z, aditional)
+}
+
+#[allow(dead_code)]
+fn shrink_vec4_to_3<N: nalgebra::BaseNum>(v: Vec4<N>) -> Vec3<N> {
+    Vec3::new(v.x, v.y, v.z)
+}
+
+#[derive(Copy, Clone)]
 pub struct Transform {
     pub s: Scale,
     pub r: Rotation,
     pub t: Translation,
 }
 
+#[allow(dead_code)]
 impl Transform {
     pub fn new() -> Transform {
         Transform {
@@ -19,17 +41,32 @@ impl Transform {
         }
     }
 
-    pub fn with_rotation(&mut self, rot_axis_angle: Vec3<f32>) -> &mut Transform {
+    pub fn with_rotation(mut self, rot_axis_angle: Vec3<f32>) -> Transform {
         self.r.set_rotation(rot_axis_angle);
         self
     }
 
-    pub fn with_translation(&mut self, t: Vec3<f32>) -> &mut Transform {
+    pub fn with_translation(mut self, t: Vec3<f32>) -> Transform {
         self.t.set_translation(t);
         self
     }
 
-    pub fn with_scale(&mut self, scale_factor: Factor) -> &mut Transform {
+    pub fn with_scale(mut self, scale_factor: Factor) -> Transform {
+        self.s.set_scale(scale_factor);
+        self
+    }
+
+    pub fn with_rotation_mut(&mut self, rot_axis_angle: Vec3<f32>) -> &mut Transform {
+        self.r.set_rotation(rot_axis_angle);
+        self
+    }
+
+    pub fn with_translation_mut(&mut self, t: Vec3<f32>) -> &mut Transform {
+        self.t.set_translation(t);
+        self
+    }
+
+    pub fn with_scale_mut(&mut self, scale_factor: Factor) -> &mut Transform {
         self.s.set_scale(scale_factor);
         self
     }
@@ -43,15 +80,18 @@ impl Transform {
     }
 }
 
+#[allow(dead_code)]
 pub enum Factor {
     Vector(Vec3<f32>),
     Scalar(f32),
 }
 
+#[derive(Copy, Clone)]
 pub struct Scale {
     scale: Mat4<f32>,
 }
 
+#[allow(dead_code)]
 impl Scale {
     pub fn new() -> Scale {
         Scale {
@@ -84,19 +124,12 @@ impl Scale {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Rotation {
     rot: Rot3<f32>
 }
 
-fn extend<N: nalgebra::BaseNum>(m: Mat3<N>) -> Mat4<N> {
-    Mat4 {
-        m11: m.m11,     m12: m.m12,     m13: m.m13,     m14: N::zero(),
-        m21: m.m21,     m22: m.m22,     m23: m.m23,     m24: N::zero(),
-        m31: m.m31,     m32: m.m32,     m33: m.m33,     m34: N::zero(),
-        m41: N::zero(), m42: N::zero(), m43: N::zero(), m44: N::one(),
-    }
-}
-
+#[allow(dead_code)]
 impl Rotation {
     pub fn new() -> Rotation {
         Rotation {
@@ -108,15 +141,25 @@ impl Rotation {
         self.rot.set_rotation(rot_axis_angle);
     }
 
+    pub fn add_rotation(&mut self, rot_axis_angle: Vec3<f32>) {
+        self.rot.prepend_rotation_mut(&rot_axis_angle);
+    }
+
     pub fn to_mat(&self) -> Mat4<f32> {
-        extend(self.rot.submat().clone())
+        extend_mat3_to_4(self.rot.submat().clone())
+    }
+
+    pub fn look_at(&mut self, at: Vec3<f32>, up: Vec3<f32>) {
+        self.rot.look_at_z(&at, &up);
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Translation {
     mat: Mat4<f32>
 }
 
+#[allow(dead_code)]
 impl Translation {
     pub fn new() -> Translation {
         Translation {
@@ -125,14 +168,19 @@ impl Translation {
     }
 
     pub fn set_translation(&mut self, pos: Vec3<f32>) {
-        self.mat.set_col(3, Vec4{x: pos.x, y: pos.y, z: pos.z, w: 1.0});
+        self.mat.set_col(3, extend_vec3_to_4(pos, 1.0));
+    }
+
+    pub fn add_translation(&mut self, pos: Vec3<f32>) {
+        let cur_transl = self.get_translation();
+        self.mat.set_col(3, extend_vec3_to_4(pos + cur_transl, 1.0));
+    }
+
+    pub fn get_translation(&self) -> Vec3<f32> {
+        shrink_vec4_to_3(self.mat.col(3))
     }
 
     pub fn to_mat(&self) -> Mat4<f32> {
         self.mat
-    }
-
-    pub fn to_array(&self) -> [[f32; 4]; 4] {
-        self.mat.as_array().clone()
     }
 }

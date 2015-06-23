@@ -1,30 +1,32 @@
 extern crate glium;
+extern crate std;
 
 use glium::vertex::{Vertex, VertexBufferAny, PerInstance};
 use glium::index::NoIndices;
 use glium::VertexBuffer;
 use glium::backend::Facade;
 use glium::buffer::Mapping;
+use std::iter::Iterator;
 
 pub struct InstancedObjects<T>
     where T: Vertex + Copy + Send + 'static {
     vertices: VertexBufferAny,
     indices: NoIndices,
-    per_instance: VertexBuffer<T>,
+    pub per_instance: VertexBuffer<T>,
 }
 
 impl<T> InstancedObjects<T>
     where T: Vertex + Copy + Send + 'static {
-    pub fn new<F: Facade, G: FnMut() -> Vec<T>>(
+
+    pub fn new<F: Facade> (
         facade: &F,
-        verts: VertexBufferAny,
-        indices: NoIndices,
-        mut per_instance_generator: G
+        vertex_info: (VertexBufferAny, NoIndices),
+        per_instance_data: Vec<T>
     ) -> InstancedObjects<T> {
         InstancedObjects {
-            vertices: verts,
-            indices: indices,
-            per_instance: VertexBuffer::dynamic(facade, per_instance_generator())
+            vertices: vertex_info.0,
+            indices: vertex_info.1,
+            per_instance: VertexBuffer::dynamic(facade, per_instance_data)
         }
     }
 
@@ -36,7 +38,8 @@ impl<T> InstancedObjects<T>
         &self.indices
     }
 
-    pub fn update_per_instance_buffer<F>(&mut self, mut upd_func: F) where F: FnMut(&mut Mapping<T>) {
+    pub fn update_per_instance_buffer<F>(&mut self, upd_func: F)
+        where F: FnOnce(&mut Mapping<T>) {
         upd_func(&mut self.per_instance.map());
     }
 }
