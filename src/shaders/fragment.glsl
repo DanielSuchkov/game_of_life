@@ -10,5 +10,5 @@ const vec3 LIGHT = vec3(-0.7, -0.8, 1.0);
 void main() {
     float lum = max(dot(normalize(v_normal), normalize(LIGHT)), 0.0);
     vec3 color = (0.3 + 0.7 * lum) * v_color;
-    f_color = vec4(color, 1.0);
+    f_color = vec4(color, 0.2);
 }

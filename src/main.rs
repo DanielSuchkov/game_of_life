@@ -12,7 +12,6 @@ mod objects;
 use std::thread;
 use glium::Surface;
 use glium::glutin;
-use std::borrow::Borrow;
 use transform::{Factor, Transform};
 use nalgebra::Vec3;
 use glium::backend::glutin_backend::{GlutinFacade};
@@ -22,76 +21,13 @@ pub enum Action {
     Continue,
 }
 
-struct StateManager {
-    angle: f64
+pub struct PerObjectState {
+    t: transform::Transform,
 }
 
-#[derive(Copy, Clone)]
-pub struct Mat4Attr {
-    pub row0: [f32; 4],
-    pub row1: [f32; 4],
-    pub row2: [f32; 4],
-    pub row3: [f32; 4],
-}
-
-impl Default for Mat4Attr {
-    fn default() -> Mat4Attr {
-        Mat4Attr{
-            row0: [0.0, 0.0, 0.0, 0.0],
-            row1: [0.0, 0.0, 0.0, 0.0],
-            row2: [0.0, 0.0, 0.0, 0.0],
-            row3: [0.0, 0.0, 0.0, 0.0],
-        }
-    }
-}
-
-implement_vertex!(Mat4Attr, row0, row1, row2, row3);
-
-impl StateManager {
-    fn new() -> StateManager {
-        StateManager { angle: 0.0 }
-    }
-
-    fn collect_initial_state<F, T>(mut func: F) -> Vec<T>
-        where F: FnMut(Transform) -> T {
-        (0 .. 100).map(|n|
-            func(Transform::new()
-                .with_rotation(Vec3::new(0.0, 0.0f32, 0.0))
-                .with_translation(Vec3::new(((n / 10) as f32 - 4.5) * 15.0, ((n % 10) as f32 - 4.5) * 15.0, 200.0))
-            )
-        ).collect::<Vec<_>>()
-    }
-
-    fn update_state_storage<'a>(&self, iter_over_stg: std::slice::IterMut<'a, Transform>) {
-        for t in iter_over_stg {
-            t.with_rotation_mut(Vec3 {
-                x: self.angle.to_radians() as f32,
-                y: self.angle.to_radians() as f32,
-                z: -self.angle.to_radians() as f32
-            });
-        }
-    }
-
-    fn step_state_fwd(&mut self) {
-        self.angle += 5.0;
-    }
-
-    fn step_state_bwd(&mut self) {
-        self.angle -= 5.0;
-    }
-}
-
-struct Sterek {
-    display: GlutinFacade,
-    main_group: objects::InstancedObjects<Mat4Attr>,
-    main_program: glium::Program,
-    camera: camera::PerspectiveCamera,
-    state_mgr: StateManager,
-}
-
-fn transform_to_mat4attr(t: &Transform) -> Mat4Attr {
+fn transform_to_mat4attr(t: &Transform) -> PerObjectAttr {
     let model = t.to_array();
-    Mat4Attr {
+    PerObjectAttr {
         row0: model[0],
         row1: model[1],
         row2: model[2],
@@ -99,9 +35,103 @@ fn transform_to_mat4attr(t: &Transform) -> Mat4Attr {
     }
 }
 
+impl PerObjectState {
+    pub fn to_attr(&self) -> PerObjectAttr {
+        transform_to_mat4attr(&self.t)
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct PerObjectAttr {
+    pub row0: [f32; 4],
+    pub row1: [f32; 4],
+    pub row2: [f32; 4],
+    pub row3: [f32; 4],
+}
+
+type Range3 = (std::ops::Range<i32>, std::ops::Range<i32>, std::ops::Range<i32>);
+
+struct State {
+    angle: f64,
+    nbs: Range3,
+}
+
+impl State {
+    pub fn new(el_rng: Range3) -> State {
+        State {
+            angle: 0.0,
+            nbs: el_rng,
+        }
+    }
+
+    pub fn iter_over_dims(&self) -> Box<Iterator<Item = (i32, i32, i32)>> {
+        let (d1, d2, d3) = self.nbs.clone();
+        Box::new(
+            d1.flat_map(move |x| {
+                let d3 = d3.clone();
+                d2.clone().flat_map(move |y| {
+                    d3.clone().map(move |z|{
+                        (x, y, z)
+                    })
+                })
+            })
+        )
+    }
+
+    pub fn get_initial_state(&self) -> Box<Iterator<Item = PerObjectState>> {
+        let (xmax, ymax) = (self.nbs.0.end, self.nbs.1.end);
+        Box::new(
+            self.iter_over_dims().map(move |(x, y, z)|
+                PerObjectState {
+                    t: Transform::new()
+                        .with_rotation(Vec3::new(0.0, 0.0f32, 0.0))
+                        .with_translation(Vec3::new(
+                            (x as f32 - (xmax - 1) as f32 / 2.0) * 15.0,
+                            (y as f32 - (ymax - 1) as f32 / 2.0) * 15.0,
+                            350.0 + z as f32 * 15.0)
+                        )
+                        .with_scale(Factor::Scalar(5.0))
+                }
+            )
+        )
+    }
+
+    pub fn up_to_actual_state(&self, state: &mut Vec<PerObjectState>) {
+        for (_, obj_st) in self.iter_over_dims().zip(state.iter_mut()) {
+            obj_st.t.with_rotation_mut(
+                Vec3 {
+                    x: self.angle.to_radians() as f32,
+                    y: self.angle.to_radians() as f32,
+                    z: self.angle.to_radians() as f32
+                }
+            );
+        }
+    }
+
+    pub fn step_forward(&mut self) {
+        self.angle += 5.0;
+    }
+
+    pub fn step_backward(&mut self) {
+        self.angle -= 5.0;
+    }
+}
+
+implement_vertex!(PerObjectAttr, row0, row1, row2, row3);
+
+struct Sterek {
+    display: GlutinFacade,
+    main_group: objects::InstancedObjects<PerObjectAttr>,
+    main_program: glium::Program,
+    camera: camera::PerspectiveCamera,
+    state: State,
+}
+
 impl Sterek {
     fn new() -> Sterek {
         use glium::DisplayBuild;
+
+        let state = State::new((0..24, 0..24, 0..24));
 
         let display = glutin::WindowBuilder::new()
             .with_depth_buffer(24)
@@ -110,14 +140,14 @@ impl Sterek {
 
         let object_group = objects::InstancedObjects::new(
             &display,
-            support::read_from_obj(&display, "support/cube.obj").unwrap(),
-            StateManager::collect_initial_state(|_| Default::default())
+            support::read_from_obj(&display, "src/support/cube.obj").unwrap(),
+            state.get_initial_state().map(|s: PerObjectState| s.to_attr()).collect::<Vec<_>>()
         );
 
         let program = glium::Program::from_source(
             &display,
-            support::read_file_content("shaders/vertex.glsl").unwrap().borrow(),
-            support::read_file_content("shaders/fragment.glsl").unwrap().borrow(),
+            &support::read_file_content("src/shaders/vertex.glsl").unwrap(),
+            &support::read_file_content("src/shaders/fragment.glsl").unwrap(),
             None
         ).unwrap();
 
@@ -125,24 +155,27 @@ impl Sterek {
             display: display,
             main_group: object_group,
             main_program: program,
-            state_mgr: StateManager::new(),
+            state: state,
             camera: camera::PerspectiveCamera::new().with_fov(60),
         }
     }
 
     fn main_loop(&mut self) {
+        use glium::draw_parameters::{BlendingFunction, LinearBlendingFactor};
+
         let params = glium::DrawParameters {
             depth_test: glium::DepthTest::IfLess,
             depth_write: true,
+            blending_function: Some(BlendingFunction::Addition {source: LinearBlendingFactor::SourceAlpha, destination: LinearBlendingFactor::OneMinusSourceAlpha}),
             .. Default::default()
         };
 
-        let mut transforms = StateManager::collect_initial_state(|t| t.with_scale(Factor::Scalar(5.0)));
+        let mut transforms = self.state.get_initial_state().collect::<Vec<_>>();
         let mut accumulator = 0;
         let mut previous_clock = clock_ticks::precise_time_ns();
 
         'main_loop: loop {
-            self.state_mgr.update_state_storage(transforms.iter_mut());
+            self.state.up_to_actual_state(&mut transforms);
             self.update_state_buffer(transforms.iter());
             self.redraw_scene(self.display.draw(), &params);
 
@@ -150,25 +183,25 @@ impl Sterek {
                 break 'main_loop;
             }
 
-            let now = clock_ticks::precise_time_ns();
-            accumulator += now - previous_clock;
-            previous_clock = now;
+            // let now = clock_ticks::precise_time_ns();
+            // accumulator += now - previous_clock;
+            // previous_clock = now;
 
-            const FIXED_TIME_STAMP: u64 = 16666667;
-            while accumulator >= FIXED_TIME_STAMP {
-                accumulator -= FIXED_TIME_STAMP;
-                // if you have a game, update the state here
-            }
+            // const FIXED_TIME_STAMP: u64 = 16666667;
+            // while accumulator >= FIXED_TIME_STAMP {
+            //     accumulator -= FIXED_TIME_STAMP;
+            //     // if you have a game, update the state here
+            // }
 
-            thread::sleep_ms(((FIXED_TIME_STAMP - accumulator) / 1000000) as u32);
+            // thread::sleep_ms(((FIXED_TIME_STAMP - accumulator) / 1000000) as u32);
         }
     }
 
     fn update_state_buffer<'a, I>(&mut self, storage_iter: I)
-        where I: Iterator<Item = &'a Transform> {
+        where I: Iterator<Item = &'a PerObjectState> {
         self.main_group.update_per_instance_buffer(|ref mut m|
             for (transf, mat) in storage_iter.zip(m.iter_mut()) {
-                *mat = transform_to_mat4attr(&transf);
+                *mat = transf.to_attr();
             }
         );
     }
@@ -193,12 +226,12 @@ impl Sterek {
 
                 glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Up)) => {
                     self.camera.add_position(Vec3::new(0.0, 0.0, -1.0));
-                    self.state_mgr.step_state_fwd();
+                    self.state.step_forward();
                 },
 
                 glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Down)) => {
                     self.camera.add_position(Vec3::new(0.0, 0.0, 1.0));
-                    self.state_mgr.step_state_bwd();
+                    self.state.step_backward();
                 },
 
                 glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Left)) => {
