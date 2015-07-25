@@ -13,7 +13,7 @@ use std::thread;
 use glium::Surface;
 use glium::glutin;
 use transform::{Factor, Transform};
-use nalgebra::Vec3;
+use nalgebra::{Vec3, Norm};
 use glium::backend::glutin_backend::{GlutinFacade};
 
 pub enum Action {
@@ -131,7 +131,7 @@ impl Sterek {
     fn new() -> Sterek {
         use glium::DisplayBuild;
 
-        let state = State::new((0..24, 0..24, 0..24));
+        let state = State::new((0..24, 0..24, 0..1));
 
         let display = glutin::WindowBuilder::new()
             .with_depth_buffer(24)
@@ -140,14 +140,14 @@ impl Sterek {
 
         let object_group = objects::InstancedObjects::new(
             &display,
-            support::read_from_obj(&display, "src/support/cube.obj").unwrap(),
+            support::read_from_obj(&display, "support/cube.obj", true).unwrap(),
             state.get_initial_state().map(|s: PerObjectState| s.to_attr()).collect::<Vec<_>>()
         );
 
         let program = glium::Program::from_source(
             &display,
-            &support::read_file_content("src/shaders/vertex.glsl").unwrap(),
-            &support::read_file_content("src/shaders/fragment.glsl").unwrap(),
+            &support::read_file_content("shaders/vertex.glsl").unwrap(),
+            &support::read_file_content("shaders/fragment.glsl").unwrap(),
             None
         ).unwrap();
 
@@ -166,7 +166,10 @@ impl Sterek {
         let params = glium::DrawParameters {
             depth_test: glium::DepthTest::IfLess,
             depth_write: true,
-            blending_function: Some(BlendingFunction::Addition {source: LinearBlendingFactor::SourceAlpha, destination: LinearBlendingFactor::OneMinusSourceAlpha}),
+            /*blending_function: Some(BlendingFunction::Addition {
+                source: LinearBlendingFactor::SourceAlpha,
+                destination: LinearBlendingFactor::OneMinusSourceAlpha
+            }),*/
             .. Default::default()
         };
 
