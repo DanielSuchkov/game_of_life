@@ -11,7 +11,6 @@ use std::io::Read;
 use self::genmesh::EmitTriangles;
 use glium::{self, Display};
 use glium::vertex::VertexBufferAny;
-use nalgebra::{Vec3, Norm};
 
 pub enum Action {
     Stop,
@@ -78,7 +77,10 @@ pub fn read_from_obj<'a>(display: &glium::Display, path: &'a str, normalize_coor
     let mut buf = Vec::new();
     match File::open(path) {
         Ok(mut f) => f.read_to_end(&mut buf).and_then(
-            |_| Ok((load_wavefront(display, &buf, normalize_coords), glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList)))
+            |_| Ok((
+                load_wavefront(display, &buf, normalize_coords),
+                glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList)
+            ))
         ),
         Err(e) => { println!("cannot open file: {}", e); Err(e) }
     }
