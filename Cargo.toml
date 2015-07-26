@@ -1,5 +1,5 @@
 [package]
-name = "opengl_test"
+name = "game_of_life"
 version = "0.1.0"
 authors = ["Fallen_Angel_admin <suc.daniil@gmail.com>"]
 

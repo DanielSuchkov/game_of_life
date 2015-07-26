@@ -53,6 +53,14 @@ implement_vertex!(PerObjectAttr, pos, color, scale_factor);
 
 type Range3 = (std::ops::Range<usize>, std::ops::Range<usize>, std::ops::Range<usize>);
 
+fn get_line() -> std::io::Result<String> {
+    let mut result = String::new();
+    match std::io::stdin().read_line(&mut result) {
+        Ok(_) => Ok(result),
+        Err(e) => Err(e),
+    }
+}
+
 struct State {
     nbs: (usize, usize, usize),
     world: Vec<Vec<Vec<bool>>>,
@@ -72,7 +80,13 @@ impl State {
                         if x == 0 || y == 0 || z == 0 || x == x_size + 1 || y == y_size + 1 || z == z_size + 1 {
                             false
                         } else {
-                            rand::random()
+                            if x_size / 4 <= x && x <= x_size - x_size / 4
+                                && y_size / 4 <= y && y <= y_size - y_size / 4
+                                && z_size / 4 <= z && z <= z_size - z_size / 4 {
+                                rand::random()
+                            } else {
+                                false
+                            }
                         };
                     w3.push(val);
                 }
@@ -81,11 +95,16 @@ impl State {
             w1.push(w2);
         }
 
+        println!("birth:");
+        let b = get_line();
+        println!("stay:");
+        let s = get_line();
+
         State {
             nbs: (x_size, y_size, z_size),
             world: w1,
-            birth: vec![6],
-            stay: vec![5, 6, 7],
+            birth: b.unwrap().split_whitespace().map(|s| s.parse::<u32>().unwrap()).collect(),
+            stay: s.unwrap().split_whitespace().map(|s| s.parse::<u32>().unwrap()).collect(),
         }
     }
 
@@ -130,8 +149,8 @@ impl State {
 
     fn rules(&self, alive: bool, neighbours: u32) -> bool {
         match alive {
-            true => self.birth.iter().any(|x| *x == neighbours),
-            false => self.stay.iter().any(|x| *x == neighbours),
+            false => self.birth.iter().any(|x| *x == neighbours),
+            true => self.stay.iter().any(|x| *x == neighbours),
         }
     }
 
@@ -140,11 +159,26 @@ impl State {
         for (x, y, z) in self.iter_over_dims() {
             let neighbours = {
                 let mut result = 0u32;
-                for dz in 0..3 {
-                    for dy in 0..3 {
-                        for dx in 0..3 {
-                            if !(dx == 1 && dy == 1 && dz == 1) {
-                                result += old_world[x + dx - 1][y + dy - 1][z + dz - 1] as u32;
+                for mut dz in (z - 1)..(z + 2) {
+                    for mut dy in (y - 1)..(y + 2) {
+                        for mut dx in (x - 1)..(x + 2) {
+                            if self.nbs.0 > 1 {
+                                if dx == 0 { dx = self.nbs.0; }
+                                if dx == (self.nbs.0 + 1) { dx = 1; }
+                            }
+
+                            if self.nbs.1 > 1 {
+                                if dy == 0 { dy = self.nbs.1; }
+                                if dy == (self.nbs.1 + 1) { dy = 1; }
+                            }
+
+                            if self.nbs.2 > 1 {
+                                 if dz == 0 { dz = self.nbs.2; }
+                                 if dz == (self.nbs.2 + 1) { dz = 1; }
+                            }
+
+                            if !(dx == x && dy == y && dz == z) {
+                                result += old_world[dx][dy][dz] as u32;
                             }
                         }
                     }
@@ -167,10 +201,8 @@ struct Sterek {
 }
 
 impl Sterek {
-    fn new() -> Sterek {
+    fn new(state: State) -> Sterek {
         use glium::DisplayBuild;
-
-        let state = State::new(50, 50, 50);
 
         let display = glutin::WindowBuilder::new()
             .with_depth_buffer(24)
@@ -253,6 +285,12 @@ impl Sterek {
     }
 
     fn process_events(&mut self) -> Action {
+        let recalc_cam_pos = |cam: &mut camera::PerspectiveCamera, angle: f64, r: f32| {
+                let new_pos = Vec3::new(angle.to_radians().sin() as f32, 0.0, angle.to_radians().cos() as f32) * r;
+                cam.with_position_mut(new_pos)
+                    .with_rotation_mut(Vec3::new(0.0, -angle.to_radians() as f32, 0.0));
+        };
+
         for event in self.display.poll_events() {
             match event {
                 glutin::Event::Closed => return Action::Stop,
@@ -263,20 +301,12 @@ impl Sterek {
 
                 glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Up)) => {
                     self.r -= 7.5;
-                    let new_pos = Vec3::new(self.angle.to_radians().sin() as f32, 0.0, self.angle.to_radians().cos() as f32) * self.r;
-                    self.camera
-                        .with_position_mut(new_pos)
-                        .with_rotation_mut(Vec3::new(0.0, -self.angle.to_radians() as f32, 0.0))
-                        ;
+                    recalc_cam_pos(&mut self.camera, self.angle, self.r);
                 },
 
                 glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Down)) => {
                     self.r += 7.5;
-                    let new_pos = Vec3::new(self.angle.to_radians().sin() as f32, 0.0, self.angle.to_radians().cos() as f32) * self.r;
-                    self.camera
-                        .with_position_mut(new_pos)
-                        .with_rotation_mut(Vec3::new(0.0, -self.angle.to_radians() as f32, 0.0))
-                        ;
+                    recalc_cam_pos(&mut self.camera, self.angle, self.r);
                 },
 
                 glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::A)) => {
@@ -297,24 +327,16 @@ impl Sterek {
 
                 glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Left)) => {
                     self.angle -= 1.0;
-                    let new_pos = Vec3::new(self.angle.to_radians().sin() as f32, 0.0, self.angle.to_radians().cos() as f32) * self.r;
-                    self.camera
-                        .with_position_mut(new_pos)
-                        .with_rotation_mut(Vec3::new(0.0, -self.angle.to_radians() as f32, 0.0))
-                        ;
+                    recalc_cam_pos(&mut self.camera, self.angle, self.r);
                 },
 
                 glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Right)) => {
                     self.angle += 1.0;
-                    let new_pos = Vec3::new(self.angle.to_radians().sin() as f32, 0.0, self.angle.to_radians().cos() as f32) * self.r;
-                    self.camera
-                        .with_position_mut(new_pos)
-                        .with_rotation_mut(Vec3::new(0.0, -self.angle.to_radians() as f32, 0.0))
-                        ;
+                    recalc_cam_pos(&mut self.camera, self.angle, self.r);
                 },
 
                 glutin::Event::Resized(x, y) => {
-                    self.camera.with_view_dimensions(x, y);
+                    self.camera.with_view_dimensions_mut(x, y);
                 },
                 _ => {}
             }
@@ -324,6 +346,6 @@ impl Sterek {
 }
 
 fn main() {
-    let mut sterek = Sterek::new();
+    let mut sterek = Sterek::new(State::new(50, 50, 50));
     sterek.main_loop();
 }
