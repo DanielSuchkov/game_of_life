@@ -4,7 +4,6 @@ use nalgebra::{Vec3, Mat4, PerspMat3};
 
 use transform::{Translation, Rotation};
 
-#[allow(dead_code)]
 #[derive(Clone, Copy)]
 pub struct PerspectiveCamera {
     projection: PerspMat3<f32>,
@@ -12,7 +11,6 @@ pub struct PerspectiveCamera {
     rotation: Rotation,
 }
 
-#[allow(dead_code)]
 impl PerspectiveCamera {
     pub fn new() -> PerspectiveCamera {
         PerspectiveCamera {
@@ -22,40 +20,40 @@ impl PerspectiveCamera {
         }
     }
 
-    pub fn with_fov_mut(&mut self, deg_angle: i32) -> &mut PerspectiveCamera {
-        self.projection.set_fov((deg_angle as f64).to_radians() as f32);
-        self
-    }
+    // pub fn with_fov_mut(&mut self, deg_angle: i32) -> &mut PerspectiveCamera {
+    //     self.projection.set_fov((deg_angle as f64).to_radians() as f32);
+    //     self
+    // }
 
-    pub fn with_aspect_mut(&mut self, aspect: f32) -> &mut PerspectiveCamera {
-        self.projection.set_aspect(aspect);
-        self
-    }
+    // pub fn with_aspect_mut(&mut self, aspect: f32) -> &mut PerspectiveCamera {
+    //     self.projection.set_aspect(aspect);
+    //     self
+    // }
 
     pub fn with_view_dimensions_mut(&mut self, width: u32, height: u32) -> &mut PerspectiveCamera {
         self.projection.set_aspect(width as f32 / height as f32);
         self
     }
 
-    pub fn with_znear_mut(&mut self, val: f32) -> &mut PerspectiveCamera {
-        self.projection.set_znear(val);
-        self
-    }
+    // pub fn with_znear_mut(&mut self, val: f32) -> &mut PerspectiveCamera {
+    //     self.projection.set_znear(val);
+    //     self
+    // }
 
-    pub fn with_zfar_mut(&mut self, val: f32) -> &mut PerspectiveCamera {
-        self.projection.set_zfar(val);
-        self
-    }
+    // pub fn with_zfar_mut(&mut self, val: f32) -> &mut PerspectiveCamera {
+    //     self.projection.set_zfar(val);
+    //     self
+    // }
 
     pub fn with_rotation_mut(&mut self, rot: Vec3<f32>) -> &mut PerspectiveCamera {
         self.rotation.set_rotation(rot);
         self
     }
 
-    pub fn with_look_at_mut(&mut self, at: Vec3<f32>, up: Vec3<f32>) -> &mut PerspectiveCamera {
-        self.rotation.look_at(at, up);
-        self
-    }
+    // pub fn with_look_at_mut(&mut self, at: Vec3<f32>, up: Vec3<f32>) -> &mut PerspectiveCamera {
+    //     self.rotation.look_at(at, up);
+    //     self
+    // }
 
     pub fn with_position_mut(&mut self, pos: Vec3<f32>) -> &mut PerspectiveCamera {
         self.translation.set_translation(pos);
@@ -67,35 +65,35 @@ impl PerspectiveCamera {
         self
     }
 
-    pub fn with_aspect(mut self, aspect: f32) -> PerspectiveCamera {
-        self.projection.set_aspect(aspect);
-        self
-    }
+    // pub fn with_aspect(mut self, aspect: f32) -> PerspectiveCamera {
+    //     self.projection.set_aspect(aspect);
+    //     self
+    // }
 
-    pub fn with_view_dimensions(mut self, width: u32, height: u32) -> PerspectiveCamera {
-        self.projection.set_aspect(width as f32 / height as f32);
-        self
-    }
+    // pub fn with_view_dimensions(mut self, width: u32, height: u32) -> PerspectiveCamera {
+    //     self.projection.set_aspect(width as f32 / height as f32);
+    //     self
+    // }
 
-    pub fn with_znear(mut self, val: f32) -> PerspectiveCamera {
-        self.projection.set_znear(val);
-        self
-    }
+    // pub fn with_znear(mut self, val: f32) -> PerspectiveCamera {
+    //     self.projection.set_znear(val);
+    //     self
+    // }
 
-    pub fn with_zfar(mut self, val: f32) -> PerspectiveCamera {
-        self.projection.set_zfar(val);
-        self
-    }
+    // pub fn with_zfar(mut self, val: f32) -> PerspectiveCamera {
+    //     self.projection.set_zfar(val);
+    //     self
+    // }
 
-    pub fn with_rotation(mut self, rot: Vec3<f32>) -> PerspectiveCamera {
-        self.rotation.set_rotation(rot);
-        self
-    }
+    // pub fn with_rotation(mut self, rot: Vec3<f32>) -> PerspectiveCamera {
+    //     self.rotation.set_rotation(rot);
+    //     self
+    // }
 
-    pub fn with_look_at(mut self, at: Vec3<f32>, up: Vec3<f32>) -> PerspectiveCamera {
-        self.rotation.look_at(at, up);
-        self
-    }
+    // pub fn with_look_at(mut self, at: Vec3<f32>, up: Vec3<f32>) -> PerspectiveCamera {
+    //     self.rotation.look_at(at, up);
+    //     self
+    // }
 
     pub fn with_position(mut self, pos: Vec3<f32>) -> PerspectiveCamera {
         self.translation.set_translation(pos);
@@ -110,15 +108,15 @@ impl PerspectiveCamera {
         self.to_vp_mat().as_array().clone()
     }
 
-    pub fn set_position(&mut self, pos: Vec3<f32>) {
-        self.with_position(pos);
-    }
+    // pub fn set_position(&mut self, pos: Vec3<f32>) {
+    //     self.with_position(pos);
+    // }
 
     pub fn add_position(&mut self, pos: Vec3<f32>) {
         self.translation.add_translation(pos);
     }
 
-    pub fn add_rotation(&mut self, rot: Vec3<f32>) {
-        self.rotation.add_rotation(rot);
-    }
+    // pub fn add_rotation(&mut self, rot: Vec3<f32>) {
+    //     self.rotation.add_rotation(rot);
+    // }
 }

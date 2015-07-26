@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 extern crate clock_ticks;
 extern crate obj;
 extern crate nalgebra;
@@ -12,10 +10,6 @@ use self::genmesh::EmitTriangles;
 use glium::{self, Display};
 use glium::vertex::VertexBufferAny;
 
-pub enum Action {
-    Stop,
-    Continue,
-}
 
 #[derive(Copy, Clone)]
 struct Vertex {

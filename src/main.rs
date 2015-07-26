@@ -12,8 +12,8 @@ mod objects;
 use std::thread;
 use glium::Surface;
 use glium::glutin;
-use nalgebra::{Vec3};
-use glium::backend::glutin_backend::{GlutinFacade};
+use nalgebra::Vec3;
+use glium::backend::glutin_backend::GlutinFacade;
 
 pub enum Action {
     Stop,
@@ -80,9 +80,9 @@ impl State {
                         if x == 0 || y == 0 || z == 0 || x == x_size + 1 || y == y_size + 1 || z == z_size + 1 {
                             false
                         } else {
-                            if x_size / 4 <= x && x <= x_size - x_size / 4
-                                && y_size / 4 <= y && y <= y_size - y_size / 4
-                                && z_size / 4 <= z && z <= z_size - z_size / 4 {
+                            if x_size / 8 <= x && x <= x_size - x_size / 8
+                                && y_size / 8 <= y && y <= y_size - y_size / 8
+                                && z_size / 8 <= z && z <= z_size - z_size / 8 {
                                 rand::random()
                             } else {
                                 false
@@ -243,9 +243,10 @@ impl Sterek {
         };
 
         let mut transforms = self.state.get_initial_state().collect::<Vec<_>>();
-
+        let mut last_step_time = clock_ticks::precise_time_ns();
         'main_loop: loop {
-            const FIXED_TIME_STAMP: u64 = 16666667 * 2;
+            const FIXED_TIME_STAMP: u64 = 16666667;
+            const STEP_INTERVAL: u64 = 200000000;
             let t1_ns = clock_ticks::precise_time_ns();
 
             self.state.up_to_actual_state(&mut transforms);
@@ -255,6 +256,11 @@ impl Sterek {
             if let Action::Stop = self.process_events() {
                 break 'main_loop;
             }
+            if clock_ticks::precise_time_ns() - last_step_time > STEP_INTERVAL {
+                self.state.step_forward();
+                last_step_time = clock_ticks::precise_time_ns();
+            }
+
             let dt_ns = clock_ticks::precise_time_ns() - t1_ns;
             if dt_ns < FIXED_TIME_STAMP {
                 thread::sleep_ms(((FIXED_TIME_STAMP - dt_ns) / 1000000) as u32);
