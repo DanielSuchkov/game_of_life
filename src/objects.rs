@@ -26,12 +26,12 @@ impl<T> InstancedObjects<T>
         InstancedObjects {
             vertices: vertex_info.0,
             indices: vertex_info.1,
-            per_instance: VertexBuffer::dynamic(facade, per_instance_data)
+            per_instance: VertexBuffer::dynamic(facade, &*per_instance_data.into_boxed_slice()).unwrap()
         }
     }
 
     pub fn get_vertices_data(&self) -> (&VertexBufferAny, PerInstance) {
-        (&self.vertices, self.per_instance.per_instance_if_supported().unwrap())
+        (&self.vertices, self.per_instance.per_instance().unwrap())
     }
 
     pub fn get_indices_data(&self) -> &NoIndices {
@@ -39,7 +39,7 @@ impl<T> InstancedObjects<T>
     }
 
     pub fn update_per_instance_buffer<F>(&mut self, upd_func: F)
-        where F: FnOnce(&mut Mapping<T>) {
+        where F: FnOnce(&mut Mapping<[T]>) {
         upd_func(&mut self.per_instance.map());
     }
 }

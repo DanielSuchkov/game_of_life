@@ -63,7 +63,7 @@ pub fn load_wavefront(display: &Display, data: &[u8], normalize_coords: bool) ->
         }
     }
 
-    glium::vertex::VertexBuffer::new(display, vertex_data).into_vertex_buffer_any()
+    glium::vertex::VertexBuffer::new(display, &*vertex_data.into_boxed_slice()).unwrap().into_vertex_buffer_any()
 }
 
 pub fn read_from_obj<'a>(display: &glium::Display, path: &'a str, normalize_coords: bool)

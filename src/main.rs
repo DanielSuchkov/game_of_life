@@ -246,7 +246,7 @@ impl Sterek {
         let mut last_step_time = clock_ticks::precise_time_ns();
         'main_loop: loop {
             const FIXED_TIME_STAMP: u64 = 16666667;
-            const STEP_INTERVAL: u64 = 200000000;
+            const STEP_INTERVAL: u64 = 125000000;
             let t1_ns = clock_ticks::precise_time_ns();
 
             self.state.up_to_actual_state(&mut transforms);
@@ -287,7 +287,7 @@ impl Sterek {
             &params
         ).unwrap();
 
-        target.finish();
+        target.finish().unwrap();
     }
 
     fn process_events(&mut self) -> Action {
