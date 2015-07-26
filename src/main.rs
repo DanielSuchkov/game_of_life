@@ -56,6 +56,8 @@ type Range3 = (std::ops::Range<usize>, std::ops::Range<usize>, std::ops::Range<u
 struct State {
     nbs: (usize, usize, usize),
     world: Vec<Vec<Vec<bool>>>,
+    birth: Vec<u32>,
+    stay: Vec<u32>,
 }
 
 impl State {
@@ -82,6 +84,8 @@ impl State {
         State {
             nbs: (x_size, y_size, z_size),
             world: w1,
+            birth: vec![6],
+            stay: vec![5, 6, 7],
         }
     }
 
@@ -124,22 +128,10 @@ impl State {
         }
     }
 
-    fn rules(alive: bool, neighbours: u32) -> bool {
-        if !alive {
-            if 3 <= neighbours && neighbours <= 3 {
-                true
-            }
-            else {
-                false
-            }
-        }
-        else {
-            if 2 <= neighbours && neighbours <= 3 {
-                true
-            }
-            else {
-                false
-            }
+    fn rules(&self, alive: bool, neighbours: u32) -> bool {
+        match alive {
+            true => self.birth.iter().any(|x| *x == neighbours),
+            false => self.stay.iter().any(|x| *x == neighbours),
         }
     }
 
@@ -159,7 +151,7 @@ impl State {
                 }
                 result
             };
-            self.world[x][y][z] = State::rules(old_world[x][y][z], neighbours);
+            self.world[x][y][z] = self.rules(old_world[x][y][z], neighbours);
         }
     }
 }
