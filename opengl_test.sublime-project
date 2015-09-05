@@ -1,9 +1,0 @@
-{
-    "folders":
-    [
-       {
-            "path": "src",
-            "file_include_patterns": ["*.rs", "*.glsl"],
-       }
-    ]
-}

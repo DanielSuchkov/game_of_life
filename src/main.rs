@@ -3,13 +3,13 @@ extern crate glium;
 extern crate rand;
 extern crate nalgebra;
 extern crate clock_ticks;
+extern crate ndarray;
 
 mod support;
 mod camera;
 mod transform;
 mod objects;
 
-use std::thread;
 use glium::Surface;
 use glium::glutin;
 use nalgebra::Vec3;
@@ -51,81 +51,105 @@ pub struct PerObjectAttr {
 
 implement_vertex!(PerObjectAttr, pos, color, scale_factor);
 
-type Range3 = (std::ops::Range<usize>, std::ops::Range<usize>, std::ops::Range<usize>);
-
 fn get_line() -> std::io::Result<String> {
     let mut result = String::new();
     match std::io::stdin().read_line(&mut result) {
-        Ok(_) => Ok(result),
+        Ok(n) => {
+            if n > 1 {
+                Ok(result)
+            }
+            else {
+                Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Empty line"))
+            }
+        },
         Err(e) => Err(e),
     }
 }
 
+type U3d = (usize, usize, usize);
+
+#[inline]
+fn i2p((_, ys, zs): U3d, idx: usize) -> U3d {
+    (idx / (zs * ys),  (idx / zs) % ys, idx % zs)
+}
+
+#[inline]
+fn li2rp((_, ys, zs): U3d, idx: usize) -> U3d {
+    (idx / (zs * ys) + 1,  (idx / zs) % ys + 1, idx % zs + 1)
+}
+
+#[inline]
+fn lp2ri((_, ys, zs): U3d, (x, y, z): U3d) -> usize {
+    x * (zs + 2) * (ys + 2) + y * (zs + 2) + z
+}
+
+#[inline]
+fn li2ri(lds: U3d, i: usize) -> usize {
+    lp2ri(lds, li2rp(lds, i))
+}
+
+#[allow(dead_code)]
+#[inline]
+fn p2i((_, ys, zs): U3d, (x, y, z): U3d) -> usize {
+    x * zs * ys + y * zs + z
+}
+
 struct State {
-    nbs: (usize, usize, usize),
-    world: Vec<Vec<Vec<bool>>>,
+    ld: U3d,
+    world: Vec<bool>,
+    old_world: Vec<bool>,
     birth: Vec<u32>,
     stay: Vec<u32>,
 }
 
 impl State {
-    pub fn new(x_size: usize, y_size: usize, z_size: usize) -> State {
-        let mut w1 = Vec::with_capacity(x_size);
-        for x in 0..(x_size + 2) {
-            let mut w2 = Vec::with_capacity(y_size);
-            for y in 0..(y_size + 2) {
-                let mut w3 = Vec::with_capacity(z_size);
-                for z in 0..(z_size + 2) {
-                    let val =
-                        if x == 0 || y == 0 || z == 0 || x == x_size + 1 || y == y_size + 1 || z == z_size + 1 {
+    pub fn new(xs: usize, ys: usize, zs: usize) -> State {
+        let mut world = Vec::with_capacity((xs + 2) * (ys + 2) * (zs + 2));
+
+        for x in 0..(xs + 2) {
+            for y in 0..(ys + 2) {
+                for z in 0..(zs + 2) {
+                    let state =
+                        if x == 0 || y == 0 || z == 0 || x == xs + 1 || y == ys + 1 || z == zs + 1 {
                             false
-                        } else {
-                            if x_size / 8 <= x && x <= x_size - x_size / 8
-                                && y_size / 8 <= y && y <= y_size - y_size / 8
-                                && z_size / 8 <= z && z <= z_size - z_size / 8 {
+                        }
+                        else {
+                            if xs / 8 <= x && x <= xs - xs / 8
+                                && ys / 8 <= y && y <= ys - ys / 8
+                                && zs / 8 <= z && z <= zs - zs / 8
+                                && x % 5 != 0 && y % 5 != 0 && z % 5 != 0 {
                                 rand::random()
                             } else {
                                 false
                             }
                         };
-                    w3.push(val);
+                    world.push(state);
                 }
-                w2.push(w3);
             }
-            w1.push(w2);
         }
 
         println!("birth:");
-        let b = get_line();
+        let b = get_line().unwrap_or(String::from("5"));
         println!("stay:");
-        let s = get_line();
-
+        let s = get_line().unwrap_or(String::from("4 5"));
+        println!("{} | {}", b, s);
         State {
-            nbs: (x_size, y_size, z_size),
-            world: w1,
-            birth: b.unwrap().split_whitespace().map(|s| s.parse::<u32>().unwrap()).collect(),
-            stay: s.unwrap().split_whitespace().map(|s| s.parse::<u32>().unwrap()).collect(),
+            ld: (xs, ys, zs),
+            old_world: world.clone(),
+            world: world,
+            birth: b.split_whitespace().map(|s| s.parse::<u32>().unwrap()).collect(),
+            stay: s.split_whitespace().map(|s| s.parse::<u32>().unwrap()).collect(),
         }
     }
 
-    pub fn iter_over_dims(&self) -> Box<Iterator<Item = (usize, usize, usize)>> {
-        let (d1, d2, d3) = self.nbs;
-        Box::new(
-            (1..(d1 + 1)).flat_map(move |x| {
-                (1..(d2 + 1)).flat_map(move |y| {
-                    (1..(d3 + 1)).map(move |z| {
-                        (x, y, z)
-                    })
-                })
-            })
-        )
-    }
-
     pub fn get_initial_state(&self) -> Box<Iterator<Item = PerObjectState>> {
-        let (xmax, ymax, zmax) = (self.nbs.0 + 2, self.nbs.1 + 2, self.nbs.2 + 2);
+        let (xs, ys, zs) = self.ld;
+        let (xmax, ymax, zmax) = (xs + 2, ys + 2, zs + 2);
         let world = self.world.clone();
         Box::new(
-            self.iter_over_dims().map(move |(x, y, z)|
+            (0..(xs * ys * zs)).map(move |i| {
+                let (x, y, z) = i2p((xs, ys, zs), i);
+                let idx = li2ri((xs, ys, zs), i);
                 PerObjectState {
                     pos: Vec3::new(
                         (x as f32 - (xmax - 1) as f32 / 2.0) * 15.0,
@@ -133,20 +157,26 @@ impl State {
                         (z as f32 - (zmax - 1) as f32 / 2.0) * 15.0,
                     ),
                     scale_factor: 5.0,
-                    show: world[x][y][z],
+                    show: world[idx],
                     color: rand::random(),
                 }
-            )
+            })
         )
     }
 
     pub fn up_to_actual_state(&self, state: &mut Vec<PerObjectState>) {
-        let dims_iter = self.iter_over_dims();
-        for ((x, y, z), obj_st) in dims_iter.zip(state.iter_mut()) {
-            obj_st.show = self.world[x][y][z];
+        let mut st_it = state.iter_mut();
+        let (xs, ys, zs) = self.ld;
+        for x in 1..(xs + 1) {
+            for y in 1..(ys + 1) {
+                for z in 1..(zs + 1) {
+                    st_it.next().unwrap().show = self.world[lp2ri(self.ld, (x, y, z))];
+                }
+            }
         }
     }
 
+    #[inline]
     fn rules(&self, alive: bool, neighbours: u32) -> bool {
         match alive {
             false => self.birth.iter().any(|x| *x == neighbours),
@@ -155,37 +185,43 @@ impl State {
     }
 
     pub fn step_forward(&mut self) {
-        let old_world = self.world.clone();
-        for (x, y, z) in self.iter_over_dims() {
-            let neighbours = {
-                let mut result = 0u32;
-                for mut dz in (z - 1)..(z + 2) {
-                    for mut dy in (y - 1)..(y + 2) {
+        std::mem::swap(&mut self.world, &mut self.old_world);
+        let (xs, ys, zs) = self.ld;
+        for x in 1..(xs + 1) {
+            for y in 1..(ys + 1) {
+                for z in 1..(zs + 1) {
+                    let neighbours = {
+                        let mut neib = 0;
                         for mut dx in (x - 1)..(x + 2) {
-                            if self.nbs.0 > 1 {
-                                if dx == 0 { dx = self.nbs.0; }
-                                if dx == (self.nbs.0 + 1) { dx = 1; }
-                            }
+                            for mut dy in (y - 1)..(y + 2) {
+                                for mut dz in (z - 1)..(z + 2) {
+                                    if xs > 1 {
+                                        if dx == 0 { dx = xs; }
+                                        if dx == (xs + 1) { dx = 1; }
+                                    }
 
-                            if self.nbs.1 > 1 {
-                                if dy == 0 { dy = self.nbs.1; }
-                                if dy == (self.nbs.1 + 1) { dy = 1; }
-                            }
+                                    if ys > 1 {
+                                        if dy == 0 { dy = ys; }
+                                        if dy == (ys + 1) { dy = 1; }
+                                    }
 
-                            if self.nbs.2 > 1 {
-                                 if dz == 0 { dz = self.nbs.2; }
-                                 if dz == (self.nbs.2 + 1) { dz = 1; }
-                            }
+                                    if zs > 1 {
+                                         if dz == 0 { dz = zs; }
+                                         if dz == (zs + 1) { dz = 1; }
+                                    }
 
-                            if !(dx == x && dy == y && dz == z) {
-                                result += old_world[dx][dy][dz] as u32;
+                                    if !(dx == x && dy == y && dz == z) {
+                                        neib += self.old_world[lp2ri(self.ld, (dx, dy, dz))] as u32;
+                                    }
+                                }
                             }
                         }
-                    }
+                        neib
+                    };
+                    self.world[lp2ri(self.ld, (x, y, z))] =
+                        self.rules(self.old_world[lp2ri(self.ld, (x, y, z))], neighbours);
                 }
-                result
-            };
-            self.world[x][y][z] = self.rules(old_world[x][y][z], neighbours);
+            }
         }
     }
 }
@@ -217,8 +253,8 @@ impl Sterek {
 
         let program = glium::Program::from_source(
             &display,
-            &support::read_file_content("shaders/vertex.glsl").unwrap(),
-            &support::read_file_content("shaders/fragment.glsl").unwrap(),
+            &support::read_file_content("../shaders/main.vert").unwrap(),
+            &support::read_file_content("../shaders/main.frag").unwrap(),
             None
         ).unwrap();
         let r = 1500.0;
@@ -231,7 +267,8 @@ impl Sterek {
             r: r,
             camera: camera::PerspectiveCamera::new()
                 .with_fov(60)
-                .with_position(Vec3::new(0.0, 0.0, r)),
+                .with_position(Vec3::new(0.0, 0.0, r))
+                .with_zfar(5000.0),
         }
     }
 
@@ -243,11 +280,12 @@ impl Sterek {
         };
 
         let mut transforms = self.state.get_initial_state().collect::<Vec<_>>();
-        let mut last_step_time = clock_ticks::precise_time_ns();
+        let mut last_step_time = clock_ticks::precise_time_ms();
+        let mut last_up_time = last_step_time;
+        let mut frames = 0;
         'main_loop: loop {
-            const FIXED_TIME_STAMP: u64 = 16666667;
-            const STEP_INTERVAL: u64 = 125000000;
-            let t1_ns = clock_ticks::precise_time_ns();
+            frames += 1;
+            const STEP_INTERVAL: u64 = 250;
 
             self.state.up_to_actual_state(&mut transforms);
             self.update_state_buffer(transforms.iter());
@@ -256,14 +294,18 @@ impl Sterek {
             if let Action::Stop = self.process_events() {
                 break 'main_loop;
             }
-            if clock_ticks::precise_time_ns() - last_step_time > STEP_INTERVAL {
-                self.state.step_forward();
-                last_step_time = clock_ticks::precise_time_ns();
+
+            let dt = clock_ticks::precise_time_ms() - last_step_time;
+            let up_dt = clock_ticks::precise_time_ms() - last_up_time;
+            if up_dt > 1000 {
+                println!("{:?}", (frames as f32 / up_dt as f32) * 1000.0);
+                last_up_time = clock_ticks::precise_time_ms();
+                frames = 0;
             }
 
-            let dt_ns = clock_ticks::precise_time_ns() - t1_ns;
-            if dt_ns < FIXED_TIME_STAMP {
-                thread::sleep_ms(((FIXED_TIME_STAMP - dt_ns) / 1000000) as u32);
+            if dt > STEP_INTERVAL {
+                self.state.step_forward();
+                last_step_time = clock_ticks::precise_time_ms();
             }
         }
     }

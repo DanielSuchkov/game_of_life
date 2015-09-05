@@ -80,10 +80,10 @@ impl PerspectiveCamera {
     //     self
     // }
 
-    // pub fn with_zfar(mut self, val: f32) -> PerspectiveCamera {
-    //     self.projection.set_zfar(val);
-    //     self
-    // }
+    pub fn with_zfar(mut self, val: f32) -> PerspectiveCamera {
+        self.projection.set_zfar(val);
+        self
+    }
 
     // pub fn with_rotation(mut self, rot: Vec3<f32>) -> PerspectiveCamera {
     //     self.rotation.set_rotation(rot);

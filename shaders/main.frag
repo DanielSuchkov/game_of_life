@@ -10,6 +10,6 @@ const vec4 LIGHT = -vec4(-0.7, -0.8, 1.0, 0.0);
 void main() {
     if (v_color.a < 0.00001) discard;
     float lum = max(dot(normalize(-v_normal), normalize(mvp * LIGHT).xyz), 0.0);
-    f_color = (0.3 + 0.7 * lum) * v_color;
+    f_color = (0.1 + 0.9 * lum) * v_color;
     f_color.a = v_color.a;
 }

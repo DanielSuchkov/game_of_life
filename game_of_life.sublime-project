@@ -1,0 +1,10 @@
+{
+    "folders":
+    [
+       {
+            "path": ".",
+            "file_include_patterns": ["*.toml", "*.frag", "*.vert", "*.rs"],
+            "folder_exclude_patterns": ["target"]
+       },
+    ]
+}

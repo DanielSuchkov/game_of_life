@@ -9,6 +9,10 @@ genmesh = "*"
 clock_ticks = "*"
 obj = "*"
 rand = "*"
+lazy_static = "*"
+gl_common = "*"
+libc = "*"
+smallvec = "*"
 
 [features]
 default = ["glutin", "image", "nalgebra", "cgmath", "gl_read_buffer", "gl_depth_textures"]
@@ -40,12 +44,9 @@ optional = true
 [dependencies.image]
 optional = true
 
-[dependencies]
-lazy_static = "*"
-gl_common = "*"
-libc = "*"
-smallvec = "*"
-
 [build-dependencies]
 gl_generator = "*"
 khronos_api = "*"
+
+[dependencies.ndarray]
+git = "https://github.com/bluss/rust-ndarray"
