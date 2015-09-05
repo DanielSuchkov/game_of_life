@@ -71,6 +71,7 @@ type U3d = (usize, usize, usize);
 #[inline]
 fn i2p((_, ys, zs): U3d, idx: usize) -> U3d {
     (idx / (zs * ys),  (idx / zs) % ys, idx % zs)
+
 }
 
 #[inline]
@@ -123,16 +124,15 @@ impl State {
 
     pub fn get_initial_state(&self) -> Box<Iterator<Item = PerObjectState>> {
         let (xs, ys, zs) = self.dim;
-        let (xmax, ymax, zmax) = self.dim;
         let world = self.world.clone();
         Box::new(
             (0..(xs * ys * zs)).map(move |i| {
                 let (x, y, z) = i2p((xs, ys, zs), i);
                 PerObjectState {
                     pos: Vec3::new(
-                        (x as f32 - (xmax - 1) as f32 / 2.0) * 15.0,
-                        (y as f32 - (ymax - 1) as f32 / 2.0) * 15.0,
-                        (z as f32 - (zmax - 1) as f32 / 2.0) * 15.0,
+                        (x as f32 - (xs - 1) as f32 / 2.0) * 15.0,
+                        (y as f32 - (ys - 1) as f32 / 2.0) * 15.0,
+                        (z as f32 - (zs - 1) as f32 / 2.0) * 15.0,
                     ),
                     scale_factor: 5.0,
                     show: world[i],
@@ -143,14 +143,8 @@ impl State {
     }
 
     pub fn up_to_actual_state(&self, state: &mut Vec<PerObjectState>) {
-        let mut st_it = state.iter_mut();
-        let (xs, ys, zs) = self.dim;
-        for x in 0..xs {
-            for y in 0..ys {
-                for z in 0..zs {
-                    st_it.next().unwrap().show = self.world[p2i(self.dim, (x, y, z))];
-                }
-            }
+        for (mut st, wld) in state.iter_mut().zip(self.world.iter()) {
+            st.show = *wld;
         }
     }
 
@@ -196,8 +190,8 @@ impl State {
                         }
                         neib
                     };
-                    self.world[p2i(self.dim, (x - 1, y - 1, z - 1))] =
-                        self.rules(self.old_world[p2i(self.dim, (x - 1, y - 1, z - 1))], neighbours);
+                    let i = p2i(self.dim, (x - 1, y - 1, z - 1));
+                    self.world[i] = self.rules(self.old_world[i], neighbours);
                 }
             }
         }
