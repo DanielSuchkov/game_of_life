@@ -74,28 +74,12 @@ fn i2p((_, ys, zs): U3d, idx: usize) -> U3d {
 }
 
 #[inline]
-fn li2rp((_, ys, zs): U3d, idx: usize) -> U3d {
-    (idx / (zs * ys) + 1,  (idx / zs) % ys + 1, idx % zs + 1)
-}
-
-#[inline]
-fn lp2ri((_, ys, zs): U3d, (x, y, z): U3d) -> usize {
-    x * (zs + 2) * (ys + 2) + y * (zs + 2) + z
-}
-
-#[inline]
-fn li2ri(lds: U3d, i: usize) -> usize {
-    lp2ri(lds, li2rp(lds, i))
-}
-
-#[allow(dead_code)]
-#[inline]
 fn p2i((_, ys, zs): U3d, (x, y, z): U3d) -> usize {
     x * zs * ys + y * zs + z
 }
 
 struct State {
-    ld: U3d,
+    dim: U3d,
     world: Vec<bool>,
     old_world: Vec<bool>,
     birth: Vec<u32>,
@@ -103,25 +87,20 @@ struct State {
 }
 
 impl State {
-    pub fn new(xs: usize, ys: usize, zs: usize) -> State {
-        let mut world = Vec::with_capacity((xs + 2) * (ys + 2) * (zs + 2));
+    pub fn new((xs, ys, zs): U3d) -> State {
+        let mut world = Vec::with_capacity(xs * ys * zs);
 
-        for x in 0..(xs + 2) {
-            for y in 0..(ys + 2) {
-                for z in 0..(zs + 2) {
+        for x in 0..xs {
+            for y in 0..ys {
+                for z in 0..zs {
                     let state =
-                        if x == 0 || y == 0 || z == 0 || x == xs + 1 || y == ys + 1 || z == zs + 1 {
+                        if xs / 8 <= x && x <= xs - xs / 8
+                            && ys / 8 <= y && y <= ys - ys / 8
+                            && zs / 8 <= z && z <= zs - zs / 8
+                            && x % 5 != 0 && y % 5 != 0 && z % 5 != 0 {
+                            rand::random()
+                        } else {
                             false
-                        }
-                        else {
-                            if xs / 8 <= x && x <= xs - xs / 8
-                                && ys / 8 <= y && y <= ys - ys / 8
-                                && zs / 8 <= z && z <= zs - zs / 8
-                                && x % 5 != 0 && y % 5 != 0 && z % 5 != 0 {
-                                rand::random()
-                            } else {
-                                false
-                            }
                         };
                     world.push(state);
                 }
@@ -134,7 +113,7 @@ impl State {
         let s = get_line().unwrap_or(String::from("4 5"));
         println!("{} | {}", b, s);
         State {
-            ld: (xs, ys, zs),
+            dim: (xs, ys, zs),
             old_world: world.clone(),
             world: world,
             birth: b.split_whitespace().map(|s| s.parse::<u32>().unwrap()).collect(),
@@ -143,13 +122,12 @@ impl State {
     }
 
     pub fn get_initial_state(&self) -> Box<Iterator<Item = PerObjectState>> {
-        let (xs, ys, zs) = self.ld;
-        let (xmax, ymax, zmax) = (xs + 2, ys + 2, zs + 2);
+        let (xs, ys, zs) = self.dim;
+        let (xmax, ymax, zmax) = self.dim;
         let world = self.world.clone();
         Box::new(
             (0..(xs * ys * zs)).map(move |i| {
                 let (x, y, z) = i2p((xs, ys, zs), i);
-                let idx = li2ri((xs, ys, zs), i);
                 PerObjectState {
                     pos: Vec3::new(
                         (x as f32 - (xmax - 1) as f32 / 2.0) * 15.0,
@@ -157,7 +135,7 @@ impl State {
                         (z as f32 - (zmax - 1) as f32 / 2.0) * 15.0,
                     ),
                     scale_factor: 5.0,
-                    show: world[idx],
+                    show: world[i],
                     color: rand::random(),
                 }
             })
@@ -166,11 +144,11 @@ impl State {
 
     pub fn up_to_actual_state(&self, state: &mut Vec<PerObjectState>) {
         let mut st_it = state.iter_mut();
-        let (xs, ys, zs) = self.ld;
-        for x in 1..(xs + 1) {
-            for y in 1..(ys + 1) {
-                for z in 1..(zs + 1) {
-                    st_it.next().unwrap().show = self.world[lp2ri(self.ld, (x, y, z))];
+        let (xs, ys, zs) = self.dim;
+        for x in 0..xs {
+            for y in 0..ys {
+                for z in 0..zs {
+                    st_it.next().unwrap().show = self.world[p2i(self.dim, (x, y, z))];
                 }
             }
         }
@@ -186,7 +164,7 @@ impl State {
 
     pub fn step_forward(&mut self) {
         std::mem::swap(&mut self.world, &mut self.old_world);
-        let (xs, ys, zs) = self.ld;
+        let (xs, ys, zs) = self.dim;
         for x in 1..(xs + 1) {
             for y in 1..(ys + 1) {
                 for z in 1..(zs + 1) {
@@ -195,31 +173,31 @@ impl State {
                         for mut dx in (x - 1)..(x + 2) {
                             for mut dy in (y - 1)..(y + 2) {
                                 for mut dz in (z - 1)..(z + 2) {
-                                    if xs > 1 {
+                                    if xs > 2 {
                                         if dx == 0 { dx = xs; }
-                                        if dx == (xs + 1) { dx = 1; }
+                                        if dx == xs + 1 { dx = 1; }
                                     }
 
-                                    if ys > 1 {
+                                    if ys > 2 {
                                         if dy == 0 { dy = ys; }
-                                        if dy == (ys + 1) { dy = 1; }
+                                        if dy == ys + 1 { dy = 1; }
                                     }
 
-                                    if zs > 1 {
+                                    if zs > 2 {
                                          if dz == 0 { dz = zs; }
-                                         if dz == (zs + 1) { dz = 1; }
+                                         if dz == zs + 1 { dz = 1; }
                                     }
 
                                     if !(dx == x && dy == y && dz == z) {
-                                        neib += self.old_world[lp2ri(self.ld, (dx, dy, dz))] as u32;
+                                        neib += self.old_world[p2i(self.dim, (dx - 1, dy - 1, dz - 1))] as u32;
                                     }
                                 }
                             }
                         }
                         neib
                     };
-                    self.world[lp2ri(self.ld, (x, y, z))] =
-                        self.rules(self.old_world[lp2ri(self.ld, (x, y, z))], neighbours);
+                    self.world[p2i(self.dim, (x - 1, y - 1, z - 1))] =
+                        self.rules(self.old_world[p2i(self.dim, (x - 1, y - 1, z - 1))], neighbours);
                 }
             }
         }
@@ -394,6 +372,6 @@ impl Sterek {
 }
 
 fn main() {
-    let mut sterek = Sterek::new(State::new(50, 50, 50));
+    let mut sterek = Sterek::new(State::new((50, 50, 50)));
     sterek.main_loop();
 }
