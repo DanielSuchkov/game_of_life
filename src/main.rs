@@ -14,6 +14,7 @@ use glium::Surface;
 use glium::glutin;
 use nalgebra::Vec3;
 use glium::backend::glutin_backend::GlutinFacade;
+use glium::glutin::{Event, ElementState, VirtualKeyCode};
 
 pub enum Action {
     Stop,
@@ -159,40 +160,39 @@ impl State {
     pub fn step_forward(&mut self) {
         std::mem::swap(&mut self.world, &mut self.old_world);
         let (xs, ys, zs) = self.dim;
-        for x in 1..(xs + 1) {
-            for y in 1..(ys + 1) {
-                for z in 1..(zs + 1) {
-                    let neighbours = {
-                        let mut neib = 0;
-                        for mut dx in (x - 1)..(x + 2) {
-                            for mut dy in (y - 1)..(y + 2) {
-                                for mut dz in (z - 1)..(z + 2) {
-                                    if xs > 2 {
-                                        if dx == 0 { dx = xs; }
-                                        if dx == xs + 1 { dx = 1; }
-                                    }
+        unsafe {
+            for i in 0..(xs * ys * zs) {
+                let (x, y, z) = i2p(self.dim, i);
+                let (x, y, z) = (x + 1, y + 1, z + 1);
+                let neighbours = {
+                    let mut neib = 0;
+                    for mut dx in (x - 1)..(x + 2) {
+                        for mut dy in (y - 1)..(y + 2) {
+                            for mut dz in (z - 1)..(z + 2) {
+                                if xs > 2 {
+                                    if dx == 0 { dx = xs; }
+                                    if dx == xs + 1 { dx = 1; }
+                                }
 
-                                    if ys > 2 {
-                                        if dy == 0 { dy = ys; }
-                                        if dy == ys + 1 { dy = 1; }
-                                    }
+                                if ys > 2 {
+                                    if dy == 0 { dy = ys; }
+                                    if dy == ys + 1 { dy = 1; }
+                                }
 
-                                    if zs > 2 {
-                                         if dz == 0 { dz = zs; }
-                                         if dz == zs + 1 { dz = 1; }
-                                    }
+                                if zs > 2 {
+                                     if dz == 0 { dz = zs; }
+                                     if dz == zs + 1 { dz = 1; }
+                                }
 
-                                    if !(dx == x && dy == y && dz == z) {
-                                        neib += self.old_world[p2i(self.dim, (dx - 1, dy - 1, dz - 1))] as u32;
-                                    }
+                                if !(dx == x && dy == y && dz == z) {
+                                    neib += *self.old_world.get_unchecked(p2i(self.dim, (dx - 1, dy - 1, dz - 1))) as u32;
                                 }
                             }
                         }
-                        neib
-                    };
-                    let i = p2i(self.dim, (x - 1, y - 1, z - 1));
-                    self.world[i] = self.rules(self.old_world[i], neighbours);
-                }
+                    }
+                    neib
+                };
+                *self.world.get_unchecked_mut(i) = self.rules(*self.old_world.get_unchecked(i), neighbours);
             }
         }
     }
@@ -220,7 +220,9 @@ impl Sterek {
         let object_group = objects::InstancedObjects::new(
             &display,
             support::read_from_obj(&display, "support/cube.obj", true).unwrap(),
-            state.get_initial_state().map(|s| s.to_attr()).collect::<Vec<_>>()
+            state.get_initial_state()
+                .map(|s| s.to_attr())
+                .collect()
         );
 
         let program = glium::Program::from_source(
@@ -251,7 +253,7 @@ impl Sterek {
             .. Default::default()
         };
 
-        let mut transforms = self.state.get_initial_state().collect::<Vec<_>>();
+        let mut transforms = self.state.get_initial_state().collect();
         let mut last_step_time = clock_ticks::precise_time_ms();
         let mut last_up_time = last_step_time;
         let mut frames = 0;
@@ -259,25 +261,24 @@ impl Sterek {
             frames += 1;
             const STEP_INTERVAL: u64 = 250;
 
-            self.state.up_to_actual_state(&mut transforms);
-            self.update_state_buffer(transforms.iter());
+            let dt = clock_ticks::precise_time_ms() - last_step_time;
+            if dt > STEP_INTERVAL {
+                self.state.step_forward();
+                last_step_time = clock_ticks::precise_time_ms();
+                self.state.up_to_actual_state(&mut transforms);
+                self.update_state_buffer(transforms.iter());
+            }
+
             self.redraw_scene(self.display.draw(), &params);
 
             if let Action::Stop = self.process_events() {
                 break 'main_loop;
             }
-
-            let dt = clock_ticks::precise_time_ms() - last_step_time;
             let up_dt = clock_ticks::precise_time_ms() - last_up_time;
             if up_dt > 1000 {
-                println!("{:?}", (frames as f32 / up_dt as f32) * 1000.0);
+                println!("{ft}: {fps}", ft=(up_dt as f32 / frames as f32), fps=(frames as f32 / up_dt as f32 * 1000.0));
                 last_up_time = clock_ticks::precise_time_ms();
                 frames = 0;
-            }
-
-            if dt > STEP_INTERVAL {
-                self.state.step_forward();
-                last_step_time = clock_ticks::precise_time_ms();
             }
         }
     }
@@ -313,49 +314,49 @@ impl Sterek {
 
         for event in self.display.poll_events() {
             match event {
-                glutin::Event::Closed => return Action::Stop,
+                Event::Closed => return Action::Stop,
 
-                glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Add)) => {
+                Event::KeyboardInput(ElementState::Pressed, _, Some(VirtualKeyCode::Add)) => {
                     self.state.step_forward();
                 }
 
-                glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Up)) => {
+                Event::KeyboardInput(ElementState::Pressed, _, Some(VirtualKeyCode::Up)) => {
                     self.r -= 7.5;
                     recalc_cam_pos(&mut self.camera, self.angle, self.r);
                 },
 
-                glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Down)) => {
+                Event::KeyboardInput(ElementState::Pressed, _, Some(VirtualKeyCode::Down)) => {
                     self.r += 7.5;
                     recalc_cam_pos(&mut self.camera, self.angle, self.r);
                 },
 
-                glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::A)) => {
+                Event::KeyboardInput(ElementState::Pressed, _, Some(VirtualKeyCode::A)) => {
                     self.camera.add_position(Vec3::new(-1.0, 0.0, 0.0));
                 },
 
-                glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::D)) => {
+                Event::KeyboardInput(ElementState::Pressed, _, Some(VirtualKeyCode::D)) => {
                     self.camera.add_position(Vec3::new(1.0, 0.0, 0.0));
                 },
 
-                glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::W)) => {
+                Event::KeyboardInput(ElementState::Pressed, _, Some(VirtualKeyCode::W)) => {
                     self.camera.add_position(Vec3::new(0.0, -1.0, 0.0));
                 },
 
-                glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::S)) => {
+                Event::KeyboardInput(ElementState::Pressed, _, Some(VirtualKeyCode::S)) => {
                     self.camera.add_position(Vec3::new(0.0, 1.0, 0.0));
                 },
 
-                glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Left)) => {
+                Event::KeyboardInput(ElementState::Pressed, _, Some(VirtualKeyCode::Left)) => {
                     self.angle -= 1.0;
                     recalc_cam_pos(&mut self.camera, self.angle, self.r);
                 },
 
-                glutin::Event::KeyboardInput(glutin::ElementState::Pressed, _, Some(glutin::VirtualKeyCode::Right)) => {
+                Event::KeyboardInput(ElementState::Pressed, _, Some(VirtualKeyCode::Right)) => {
                     self.angle += 1.0;
                     recalc_cam_pos(&mut self.camera, self.angle, self.r);
                 },
 
-                glutin::Event::Resized(x, y) => {
+                Event::Resized(x, y) => {
                     self.camera.with_view_dimensions_mut(x, y);
                 },
                 _ => {}
