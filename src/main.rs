@@ -3,15 +3,14 @@ extern crate glium;
 extern crate rand;
 extern crate nalgebra;
 extern crate clock_ticks;
-extern crate ndarray;
+extern crate image;
 
 mod support;
 mod camera;
 mod transform;
 mod objects;
 
-use glium::Surface;
-use glium::glutin;
+use glium::{Surface, glutin};
 use nalgebra::Vec3;
 use glium::backend::glutin_backend::GlutinFacade;
 use glium::glutin::{Event, ElementState, VirtualKeyCode};
@@ -72,7 +71,6 @@ type U3d = (usize, usize, usize);
 #[inline]
 fn i2p((_, ys, zs): U3d, idx: usize) -> U3d {
     (idx / (zs * ys),  (idx / zs) % ys, idx % zs)
-
 }
 
 #[inline]
@@ -137,7 +135,12 @@ impl State {
                     ),
                     scale_factor: 5.0,
                     show: world[i],
-                    color: rand::random(),
+                    color: Vec3::new(0.9, 0.9, 0.9),
+                        // if rand::random() {
+                        //     Vec3::new(0.3 * rand::random::<f32>(), 0.05, 0.1)
+                        // } else {
+                        //     Vec3::new(0.1, 0.05, 0.3 * rand::random::<f32>())
+                        // },
                 }
             })
         )
@@ -198,18 +201,29 @@ impl State {
     }
 }
 
-struct Sterek {
+#[derive(Copy, Clone)]
+struct Vertex {
+    position: [f32; 2],
+}
+
+implement_vertex!(Vertex, position);
+
+struct Applicaton {
     display: GlutinFacade,
     main_group: objects::InstancedObjects<PerObjectAttr>,
     main_program: glium::Program,
+    background_program: glium::Program,
+    background_vb: glium::VertexBuffer<Vertex>,
+    background_ib: glium::IndexBuffer<u16>,
     camera: camera::PerspectiveCamera,
     state: State,
+    time_from_start: f32,
     angle: f64,
     r: f32,
 }
 
-impl Sterek {
-    fn new(state: State) -> Sterek {
+impl Applicaton {
+    fn new(state: State) -> Applicaton {
         use glium::DisplayBuild;
 
         let display = glutin::WindowBuilder::new()
@@ -227,15 +241,41 @@ impl Sterek {
 
         let program = glium::Program::from_source(
             &display,
-            &support::read_file_content("../shaders/main.vert").unwrap(),
-            &support::read_file_content("../shaders/main.frag").unwrap(),
+            &support::read_file_content("../shaders/main.vs").unwrap(),
+            &support::read_file_content("../shaders/main.fs").unwrap(),
             None
         ).unwrap();
+
+        let bg_program = glium::Program::from_source(
+            &display,
+            &support::read_file_content("../shaders/proc_tex.vs").unwrap(),
+            &support::read_file_content("../shaders/proc_tex.fs").unwrap(),
+            None
+        ).unwrap();
+
+        let background_vb = glium::VertexBuffer::new(
+            &display,
+            &[
+                Vertex { position: [-1.0, -1.0]},
+                Vertex { position: [-1.0,  1.0]},
+                Vertex { position: [ 1.0,  1.0]},
+                Vertex { position: [ 1.0, -1.0]}
+            ]
+        ).unwrap();
+
+        let background_ib = glium::IndexBuffer::new(
+            &display, glium::index::PrimitiveType::TriangleStrip, &[1 as u16, 2, 0, 3]
+        ).unwrap();
+
         let r = 1500.0;
-        Sterek {
+        Applicaton {
             display: display,
             main_group: object_group,
             main_program: program,
+            background_program: bg_program,
+            background_vb: background_vb,
+            background_ib: background_ib,
+            time_from_start: 0.0,
             state: state,
             angle: 0.0,
             r: r,
@@ -256,17 +296,23 @@ impl Sterek {
         let mut transforms = self.state.get_initial_state().collect();
         let mut last_step_time = clock_ticks::precise_time_ms();
         let mut last_up_time = last_step_time;
+        let mut last_frame_time = last_step_time;
         let mut frames = 0;
         'main_loop: loop {
             frames += 1;
-            const STEP_INTERVAL: u64 = 250;
+            const STEP_INTERVAL: u64 = 500;
 
-            let dt = clock_ticks::precise_time_ms() - last_step_time;
+            let current_time = clock_ticks::precise_time_ms();
+            let dt = current_time - last_step_time;
+            let frame_dt = current_time - last_frame_time;
+            last_frame_time = current_time;
+            self.time_from_start += frame_dt as f32 / 1000.0;
+
             if dt > STEP_INTERVAL {
                 self.state.step_forward();
-                last_step_time = clock_ticks::precise_time_ms();
                 self.state.up_to_actual_state(&mut transforms);
                 self.update_state_buffer(transforms.iter());
+                last_step_time = clock_ticks::precise_time_ms();
             }
 
             self.redraw_scene(self.display.draw(), &params);
@@ -293,12 +339,29 @@ impl Sterek {
     }
 
     fn redraw_scene(&self, mut target: glium::Frame, params: &glium::DrawParameters) {
+        let (x_size, y_size) = target.get_dimensions();
+        let resolution = nalgebra::Vec2::new(x_size as f32, y_size as f32);
         target.clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 1.0);
+        target.draw(
+            &self.background_vb,
+            &self.background_ib,
+            &self.background_program,
+            &uniform!{
+                u_time: self.time_from_start,
+                u_resolution: resolution,
+            },
+            &glium::DrawParameters {
+                depth_test: glium::DepthTest::Overwrite,
+                depth_write: false,
+                .. Default::default()
+            }
+        ).unwrap();
+
         target.draw(
             self.main_group.get_vertices_data(),
             self.main_group.get_indices_data(),
             &self.main_program,
-            &uniform!{ mvp: self.camera.to_vp_array() },
+            &uniform!{ mvp: self.camera.to_vp_array(), u_time: self.time_from_start, },
             &params
         ).unwrap();
 
@@ -367,6 +430,6 @@ impl Sterek {
 }
 
 fn main() {
-    let mut sterek = Sterek::new(State::new((50, 50, 50)));
+    let mut sterek = Applicaton::new(State::new((50, 50, 50)));
     sterek.main_loop();
 }

@@ -3,7 +3,7 @@
     [
        {
             "path": ".",
-            "file_include_patterns": ["*.toml", "*.frag", "*.vert", "*.rs"],
+            "file_include_patterns": ["*.toml", "*.fs", "*.vs", "*.gs", "*.rs"],
             "folder_exclude_patterns": ["target"]
        },
     ]

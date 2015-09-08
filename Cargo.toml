@@ -47,6 +47,3 @@ optional = true
 [build-dependencies]
 gl_generator = "*"
 khronos_api = "*"
-
-[dependencies.ndarray]
-git = "https://github.com/bluss/rust-ndarray"
